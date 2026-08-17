@@ -1,0 +1,317 @@
+
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gravador de Áudio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#172033;display:grid;place-items:center;min-height:100vh}
+  .card{width:min(460px,calc(100% - 24px));background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;box-shadow:0 14px 40px rgba(15,23,42,.12)}
+  h1{font-size:19px;margin:0 0 6px}
+  .muted{font-size:12px;color:#64748b}
+  .mic{width:82px;height:82px;border-radius:50%;margin:22px auto 12px;background:#eef2f7;display:grid;place-items:center;font-size:36px}
+  .status{text-align:center;font-weight:900}
+  .time{text-align:center;font-size:30px;font-weight:900;margin:8px 0 18px}
+  .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  button{border:0;border-radius:10px;padding:10px 14px;font-weight:900;cursor:pointer}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .start{background:#128c7e;color:#fff}.stop{background:#dc2626;color:#fff}.send{background:#16a34a;color:#fff}.light{background:#eef2f7;color:#243047}
+  audio{width:100%;margin-top:14px}
+  .warn{margin-top:14px;padding:10px 12px;border:1px solid #fed7aa;background:#fff7ed;color:#9a3412;border-radius:10px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎙️ Gravador de áudio</h1>
+  <div class="muted">Grave, ouça e envie o áudio de volta para a Central.</div>
+
+  <div class="mic" id="mic">🎙️</div>
+  <div class="status" id="status">Pronto para gravar</div>
+  <div class="time" id="time">00:00</div>
+
+  <div class="row">
+    <button class="start" id="start">● Iniciar</button>
+    <button class="stop" id="stop" hidden>■ Parar</button>
+    <button class="light" id="redo" hidden>↺ Regravar</button>
+  </div>
+
+  <audio id="preview" controls hidden></audio>
+
+  <div class="row" style="margin-top:14px">
+    <button class="light" onclick="closeRecorder()">Cancelar</button>
+    <button class="send" id="send" disabled>📤 Enviar para a Central</button>
+  </div>
+
+  <div class="warn" id="warn" hidden></div>
+</div>
+
+<script>
+let stream=null;
+let audioContext=null;
+let sourceNode=null;
+let processorNode=null;
+let pcmChunks=[];
+let startedAt=0;
+let timer=null;
+let mp3DataUrl='';
+
+const $=id=>document.getElementById(id);
+
+function fmt(sec){
+  const m=String(Math.floor(sec/60)).padStart(2,'0');
+  const s=String(sec%60).padStart(2,'0');
+  return m+':'+s;
+}
+
+function setStatus(text){ $('status').textContent=text; }
+
+function showWarn(text){
+  $('warn').textContent=text;
+  $('warn').hidden=false;
+}
+
+function hideWarn(){
+  $('warn').hidden=true;
+  $('warn').textContent='';
+}
+
+function stopTracks(){
+  if(stream){
+    stream.getTracks().forEach(t=>{ try{t.stop()}catch(e){} });
+  }
+  stream=null;
+}
+
+function cleanupAudioGraph(){
+  try{ if(processorNode) processorNode.disconnect(); }catch(e){}
+  try{ if(sourceNode) sourceNode.disconnect(); }catch(e){}
+  processorNode=null;
+  sourceNode=null;
+
+  if(audioContext){
+    try{ audioContext.close(); }catch(e){}
+  }
+  audioContext=null;
+}
+
+function floatTo16BitPCM(float32){
+  const out=new Int16Array(float32.length);
+  for(let i=0;i<float32.length;i++){
+    const s=Math.max(-1,Math.min(1,float32[i]));
+    out[i]=s<0 ? s*0x8000 : s*0x7fff;
+  }
+  return out;
+}
+
+function mergeFloat32(chunks){
+  let total=0;
+  chunks.forEach(c=>total+=c.length);
+  const out=new Float32Array(total);
+  let offset=0;
+  chunks.forEach(c=>{
+    out.set(c,offset);
+    offset+=c.length;
+  });
+  return out;
+}
+
+function bytesToBase64(bytes){
+  const chunk=0x8000;
+  let binary='';
+  for(let i=0;i<bytes.length;i+=chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+chunk, bytes.length)));
+  }
+  return btoa(binary);
+}
+
+function encodeMp3(samples, sampleRate){
+  if(typeof lamejs==='undefined'){
+    throw new Error('O codificador MP3 não carregou. Atualize a página e tente novamente.');
+  }
+
+  const pcm=floatTo16BitPCM(samples);
+  const encoder=new lamejs.Mp3Encoder(1, sampleRate, 128);
+  const blockSize=1152;
+  const parts=[];
+
+  for(let i=0;i<pcm.length;i+=blockSize){
+    const chunk=pcm.subarray(i, Math.min(i+blockSize, pcm.length));
+    const mp3buf=encoder.encodeBuffer(chunk);
+    if(mp3buf.length) parts.push(new Uint8Array(mp3buf));
+  }
+
+  const end=encoder.flush();
+  if(end.length) parts.push(new Uint8Array(end));
+
+  let total=0;
+  parts.forEach(p=>total+=p.length);
+  const bytes=new Uint8Array(total);
+  let off=0;
+  parts.forEach(p=>{
+    bytes.set(p,off);
+    off+=p.length;
+  });
+
+  return bytes;
+}
+
+async function startRecording(){
+  try{
+    hideWarn();
+
+    if(!navigator.mediaDevices?.getUserMedia){
+      throw new Error('Este navegador não permite acesso ao microfone.');
+    }
+
+    stream=await navigator.mediaDevices.getUserMedia({
+      audio:{
+        channelCount:1,
+        echoCancellation:true,
+        noiseSuppression:true,
+        autoGainControl:true
+      }
+    });
+
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    audioContext=new AudioCtx();
+    await audioContext.resume();
+
+    pcmChunks=[];
+
+    sourceNode=audioContext.createMediaStreamSource(stream);
+    processorNode=audioContext.createScriptProcessor(4096,1,1);
+
+    processorNode.onaudioprocess=e=>{
+      const input=e.inputBuffer.getChannelData(0);
+      pcmChunks.push(new Float32Array(input));
+    };
+
+    sourceNode.connect(processorNode);
+    processorNode.connect(audioContext.destination);
+
+    startedAt=Date.now();
+    $('start').hidden=true;
+    $('stop').hidden=false;
+    $('redo').hidden=true;
+    $('preview').hidden=true;
+    $('send').disabled=true;
+    $('mic').style.background='#fee2e2';
+    setStatus('Gravando...');
+
+    clearInterval(timer);
+    timer=setInterval(()=>{
+      $('time').textContent=fmt(Math.floor((Date.now()-startedAt)/1000));
+    },500);
+
+  }catch(e){
+    showWarn('Não foi possível acessar o microfone: '+(e.message||e));
+  }
+}
+
+async function stopRecording(){
+  try{
+    clearInterval(timer);
+    timer=null;
+
+    $('stop').hidden=true;
+    setStatus('Convertendo para MP3...');
+
+    const sampleRate=audioContext ? audioContext.sampleRate : 44100;
+    const merged=mergeFloat32(pcmChunks);
+
+    cleanupAudioGraph();
+    stopTracks();
+
+    if(!merged.length){
+      throw new Error('Nenhum áudio foi capturado.');
+    }
+
+    const mp3Bytes=encodeMp3(merged,sampleRate);
+
+    if(!mp3Bytes.length){
+      throw new Error('Não foi possível gerar o arquivo MP3.');
+    }
+
+    if(mp3Bytes.length>7*1024*1024){
+      throw new Error('O áudio passou de 7 MB. Grave uma mensagem menor.');
+    }
+
+    const base64=bytesToBase64(mp3Bytes);
+    mp3DataUrl='data:audio/mpeg;base64,'+base64;
+
+    const preview=$('preview');
+    preview.src=mp3DataUrl;
+    preview.hidden=false;
+    try{ preview.load(); }catch(e){}
+
+    $('send').disabled=false;
+    $('redo').hidden=false;
+    $('mic').style.background='#dcfce7';
+    setStatus('Áudio MP3 pronto para enviar');
+
+  }catch(e){
+    showWarn(e.message||String(e));
+    resetRecorder();
+  }
+}
+
+function resetRecorder(){
+  clearInterval(timer);
+  timer=null;
+
+  cleanupAudioGraph();
+  stopTracks();
+
+  pcmChunks=[];
+  mp3DataUrl='';
+
+  const preview=$('preview');
+  try{ preview.pause(); }catch(e){}
+  preview.removeAttribute('src');
+  preview.hidden=true;
+
+  $('start').hidden=false;
+  $('stop').hidden=true;
+  $('redo').hidden=true;
+  $('send').disabled=true;
+  $('time').textContent='00:00';
+  $('mic').style.background='#eef2f7';
+  setStatus('Pronto para gravar');
+}
+
+function sendBack(){
+  if(!mp3DataUrl){
+    showWarn('Grave um áudio antes de enviar.');
+    return;
+  }
+
+  if(!window.opener){
+    showWarn('A Central não está disponível para receber o áudio.');
+    return;
+  }
+
+  window.opener.postMessage({
+    type:'CENTRAL_AUDIO_RECORDED',
+    dataUrl:mp3DataUrl,
+    mime:'audio/mpeg'
+  }, '*');
+
+  setStatus('Áudio enviado para a Central');
+  setTimeout(()=>window.close(),350);
+}
+
+function closeRecorder(){
+  resetRecorder();
+  window.close();
+}
+
+$('start').onclick=startRecording;
+$('stop').onclick=stopRecording;
+$('redo').onclick=resetRecorder;
+$('send').onclick=sendBack;
+</script>
+</body>
+</html>
