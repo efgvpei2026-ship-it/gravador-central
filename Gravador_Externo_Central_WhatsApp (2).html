@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gravador de Áudio</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#172033;display:grid;place-items:center;min-height:100vh}
+  .card{width:min(460px,calc(100% - 24px));background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;box-shadow:0 14px 40px rgba(15,23,42,.12)}
+  h1{font-size:19px;margin:0 0 6px}
+  .muted{font-size:12px;color:#64748b}
+  .mic{width:82px;height:82px;border-radius:50%;margin:22px auto 12px;background:#eef2f7;display:grid;place-items:center;font-size:36px}
+  .status{text-align:center;font-weight:900}
+  .time{text-align:center;font-size:30px;font-weight:900;margin:8px 0 18px}
+  .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  button{border:0;border-radius:10px;padding:10px 14px;font-weight:900;cursor:pointer}
+  .start{background:#128c7e;color:#fff}.stop{background:#dc2626;color:#fff}.send{background:#16a34a;color:#fff}.light{background:#eef2f7;color:#243047}
+  audio{width:100%;margin-top:14px}
+  .warn{margin-top:14px;padding:10px 12px;border:1px solid #fed7aa;background:#fff7ed;color:#9a3412;border-radius:10px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎙️ Gravador de áudio</h1>
+  <div class="muted">Grave, ouça e envie o áudio de volta para a Central.</div>
+  <div class="mic" id="mic">🎙️</div>
+  <div class="status" id="status">Pronto para gravar</div>
+  <div class="time" id="time">00:00</div>
+  <div class="row">
+    <button class="start" id="start">● Iniciar</button>
+    <button class="stop" id="stop" hidden>■ Parar</button>
+    <button class="light" id="redo" hidden>↺ Regravar</button>
+  </div>
+  <audio id="preview" controls hidden></audio>
+  <div class="row" style="margin-top:14px">
+    <button class="light" onclick="window.close()">Cancelar</button>
+    <button class="send" id="send" disabled>📤 Enviar para a Central</button>
+  </div>
+  <div class="warn" id="warn" hidden></div>
+</div>
+
+<script>
+let stream=null, recorder=null, chunks=[], dataUrl='', mime='audio/webm', started=0, timer=null;
+
+function fmt(sec){
+  const m=String(Math.floor(sec/60)).padStart(2,'0');
+  const s=String(sec%60).padStart(2,'0');
+  return m+':'+s;
+}
+function setStatus(t){document.getElementById('status').textContent=t}
+function stopTracks(){
+  if(stream){stream.getTracks().forEach(t=>{try{t.stop()}catch(e){}})}
+  stream=null;
+}
+function supportedMime(){
+  const list=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg'];
+  for(const m of list){try{if(MediaRecorder.isTypeSupported(m)) return m}catch(e){}}
+  return '';
+}
+async function startRecording(){
+  try{
+    document.getElementById('warn').hidden=true;
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Este navegador não permite acesso ao microfone.');
+    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const m=supportedMime();
+    recorder=m?new MediaRecorder(stream,{mimeType:m}):new MediaRecorder(stream);
+    mime=recorder.mimeType||m||'audio/webm';
+    chunks=[]; dataUrl='';
+    recorder.ondataavailable=e=>{if(e.data?.size) chunks.push(e.data)};
+    recorder.onstop=()=>{
+      const blob=new Blob(chunks,{type:mime});
+      if(blob.size>7*1024*1024){
+        document.getElementById('warn').textContent='O áudio passou de 7 MB. Grave uma mensagem menor.';
+        document.getElementById('warn').hidden=false;
+        reset();
+        return;
+      }
+      const r=new FileReader();
+      r.onload=()=>{
+        dataUrl=r.result;
+        const p=document.getElementById('preview');
+        p.src=dataUrl;p.hidden=false;
+        document.getElementById('send').disabled=false;
+        document.getElementById('redo').hidden=false;
+        setStatus('Áudio pronto para enviar');
+      };
+      r.readAsDataURL(blob);
+      stopTracks();
+    };
+    recorder.start(250);
+    started=Date.now();
+    document.getElementById('start').hidden=true;
+    document.getElementById('stop').hidden=false;
+    document.getElementById('redo').hidden=true;
+    document.getElementById('preview').hidden=true;
+    document.getElementById('send').disabled=true;
+    setStatus('Gravando...');
+    document.getElementById('mic').style.background='#fee2e2';
+    clearInterval(timer);
+    timer=setInterval(()=>document.getElementById('time').textContent=fmt(Math.floor((Date.now()-started)/1000)),500);
+  }catch(e){
+    document.getElementById('warn').textContent='Não foi possível acessar o microfone: '+(e.message||e);
+    document.getElementById('warn').hidden=false;
+  }
+}
+function stopRecording(){
+  clearInterval(timer);timer=null;
+  if(recorder && recorder.state!=='inactive') recorder.stop();
+  document.getElementById('stop').hidden=true;
+}
+function reset(){
+  clearInterval(timer);timer=null;
+  if(recorder && recorder.state!=='inactive'){try{recorder.stop()}catch(e){}}
+  stopTracks(); recorder=null; chunks=[]; dataUrl='';
+  const p=document.getElementById('preview');p.pause();p.removeAttribute('src');p.hidden=true;
+  document.getElementById('start').hidden=false;
+  document.getElementById('stop').hidden=true;
+  document.getElementById('redo').hidden=true;
+  document.getElementById('send').disabled=true;
+  document.getElementById('time').textContent='00:00';
+  document.getElementById('mic').style.background='#eef2f7';
+  setStatus('Pronto para gravar');
+}
+function sendBack(){
+  if(!dataUrl || !window.opener){
+    document.getElementById('warn').textContent='A Central não está disponível para receber o áudio.';
+    document.getElementById('warn').hidden=false;
+    return;
+  }
+  window.opener.postMessage({
+    type:'CENTRAL_AUDIO_RECORDED',
+    dataUrl,
+    mime
+  }, '*');
+  setStatus('Áudio enviado para a Central');
+  setTimeout(()=>window.close(),350);
+}
+document.getElementById('start').onclick=startRecording;
+document.getElementById('stop').onclick=stopRecording;
+document.getElementById('redo').onclick=reset;
+document.getElementById('send').onclick=sendBack;
+</script>
+</body>
+</html>
