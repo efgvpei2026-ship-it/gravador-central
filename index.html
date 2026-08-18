@@ -1,317 +1,190 @@
 
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gravador de Áudio</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
-<style>
-  *{box-sizing:border-box}
-  body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#172033;display:grid;place-items:center;min-height:100vh}
-  .card{width:min(460px,calc(100% - 24px));background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;box-shadow:0 14px 40px rgba(15,23,42,.12)}
-  h1{font-size:19px;margin:0 0 6px}
-  .muted{font-size:12px;color:#64748b}
-  .mic{width:82px;height:82px;border-radius:50%;margin:22px auto 12px;background:#eef2f7;display:grid;place-items:center;font-size:36px}
-  .status{text-align:center;font-weight:900}
-  .time{text-align:center;font-size:30px;font-weight:900;margin:8px 0 18px}
-  .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-  button{border:0;border-radius:10px;padding:10px 14px;font-weight:900;cursor:pointer}
-  button:disabled{opacity:.45;cursor:not-allowed}
-  .start{background:#128c7e;color:#fff}.stop{background:#dc2626;color:#fff}.send{background:#16a34a;color:#fff}.light{background:#eef2f7;color:#243047}
-  audio{width:100%;margin-top:14px}
-  .warn{margin-top:14px;padding:10px 12px;border:1px solid #fed7aa;background:#fff7ed;color:#9a3412;border-radius:10px;font-size:12px}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Gravador de áudio • Central WhatsApp</title>
+  <style>
+    :root{
+      --ink:#0f172a; --muted:#64748b; --line:#e5e7eb; --soft:#f8fafc;
+      --green:#0f9f8f; --green2:#16a085; --send:#86d7a8; --send2:#6fce96;
+      --danger:#dc2626; --shadow:0 24px 70px rgba(15,23,42,.16);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#eef2f7;color:var(--ink)}
+    body{padding:16px}
+    .card{width:min(620px,100%);min-height:calc(100vh - 32px);margin:auto;background:#fff;border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);padding:24px;display:flex;flex-direction:column}
+    .head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+    .title-wrap{display:flex;gap:13px;align-items:center}
+    .title-icon{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:#eef2f7;font-size:27px}
+    h1{margin:0;font-size:28px;line-height:1.1}
+    .subtitle{margin:9px 0 0;color:var(--muted);font-size:14px}
+    .close{border:0;background:transparent;color:#64748b;font-size:32px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:10px}
+    .close:hover{background:#f1f5f9}
+    .main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px 0 18px}
+    .mic-orb{width:158px;height:158px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 50% 40%,#fff,#edf2f7);border:10px solid #f8fafc;box-shadow:0 0 0 2px #e2e8f0,0 12px 30px rgba(15,23,42,.07);font-size:76px;transition:.2s}
+    .mic-orb.recording{animation:pulse 1.2s infinite;background:#fef2f2;box-shadow:0 0 0 2px #fecaca,0 0 0 13px rgba(239,68,68,.08)}
+    @keyframes pulse{50%{transform:scale(1.035)}}
+    .status{margin-top:26px;font-size:20px;font-weight:900}
+    .timer{font-size:48px;font-weight:950;letter-spacing:-1px;margin:12px 0 22px}
+    .primary{border:0;border-radius:14px;padding:15px 24px;background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;font-weight:900;font-size:16px;cursor:pointer;box-shadow:0 8px 18px rgba(15,159,143,.20)}
+    .primary.stop{background:linear-gradient(135deg,#dc2626,#b91c1c)}
+    .preview{width:min(440px,100%);margin-top:18px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#f8fafc}
+    audio{width:100%}
+    .actions{display:grid;grid-template-columns:150px 1fr;gap:12px;margin-top:auto}
+    .btn{border:0;border-radius:13px;padding:14px 18px;font-weight:900;font-size:15px;cursor:pointer}
+    .cancel{background:#eef2f7;color:#172033}
+    .send{background:linear-gradient(135deg,var(--send),var(--send2));color:#fff}
+    .send:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.15)}
+    .secure{margin-top:18px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:13px 15px;color:#64748b;font-size:13px;text-align:center}
+    .err{margin:14px auto 0;max-width:470px;padding:11px 13px;border-radius:12px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:13px;font-weight:700}
+    @media(max-width:560px){
+      body{padding:8px}.card{min-height:calc(100vh - 16px);border-radius:19px;padding:18px}
+      h1{font-size:22px}.title-icon{width:44px;height:44px;font-size:22px}.subtitle{font-size:12px}
+      .mic-orb{width:130px;height:130px;font-size:61px}.timer{font-size:40px}
+      .actions{grid-template-columns:1fr}.btn{width:100%}
+    }
+  </style>
 </head>
 <body>
-<div class="card">
-  <h1>🎙️ Gravador de áudio</h1>
-  <div class="muted">Grave, ouça e envie o áudio de volta para a Central.</div>
+  <main class="card">
+    <div class="head">
+      <div>
+        <div class="title-wrap">
+          <div class="title-icon">🎙️</div>
+          <h1>Gravador de áudio</h1>
+        </div>
+        <p class="subtitle">Grave, ouça e envie o áudio de volta para a Central.</p>
+      </div>
+      <button class="close" type="button" aria-label="Fechar" onclick="closeWindow()">×</button>
+    </div>
 
-  <div class="mic" id="mic">🎙️</div>
-  <div class="status" id="status">Pronto para gravar</div>
-  <div class="time" id="time">00:00</div>
+    <section class="main">
+      <div id="micOrb" class="mic-orb">🎙️</div>
+      <div id="status" class="status">Pronto para gravar</div>
+      <div id="timer" class="timer">00:00</div>
+      <button id="recordBtn" class="primary" type="button" onclick="toggleRecording()">● Iniciar gravação</button>
+      <div id="previewWrap" class="preview" hidden>
+        <audio id="preview" controls></audio>
+      </div>
+      <div id="errorBox" class="err" hidden></div>
+    </section>
 
-  <div class="row">
-    <button class="start" id="start">● Iniciar</button>
-    <button class="stop" id="stop" hidden>■ Parar</button>
-    <button class="light" id="redo" hidden>↺ Regravar</button>
-  </div>
-
-  <audio id="preview" controls hidden></audio>
-
-  <div class="row" style="margin-top:14px">
-    <button class="light" onclick="closeRecorder()">Cancelar</button>
-    <button class="send" id="send" disabled>📤 Enviar para a Central</button>
-  </div>
-
-  <div class="warn" id="warn" hidden></div>
-</div>
+    <div class="actions">
+      <button class="btn cancel" type="button" onclick="closeWindow()">Cancelar</button>
+      <button id="sendBtn" class="btn send" type="button" disabled onclick="sendToCentral()">📤 Enviar para a Central</button>
+    </div>
+    <div class="secure">🛡️ Seu áudio será enviado com segurança para a Central.</div>
+  </main>
 
 <script>
-let stream=null;
-let audioContext=null;
-let sourceNode=null;
-let processorNode=null;
-let pcmChunks=[];
-let startedAt=0;
-let timer=null;
-let mp3DataUrl='';
+let stream=null, recorder=null, chunks=[], startedAt=0, timerId=null, dataUrl='', mime='audio/webm';
 
-const $=id=>document.getElementById(id);
-
+function setError(msg=''){
+  const el=document.getElementById('errorBox');
+  el.hidden=!msg; el.textContent=msg;
+}
 function fmt(sec){
   const m=String(Math.floor(sec/60)).padStart(2,'0');
   const s=String(sec%60).padStart(2,'0');
   return m+':'+s;
 }
+function startTimer(){
+  startedAt=Date.now();
+  clearInterval(timerId);
+  timerId=setInterval(()=>{
+    document.getElementById('timer').textContent=fmt(Math.floor((Date.now()-startedAt)/1000));
+  },250);
+}
+function stopTimer(){clearInterval(timerId);timerId=null}
+function stopTracks(){try{stream?.getTracks().forEach(t=>t.stop())}catch(e){} stream=null}
 
-function setStatus(text){ $('status').textContent=text; }
-
-function showWarn(text){
-  $('warn').textContent=text;
-  $('warn').hidden=false;
+function supportedMime(){
+  const list=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg'];
+  for(const x of list){try{if(MediaRecorder.isTypeSupported(x))return x}catch(e){}}
+  return '';
 }
 
-function hideWarn(){
-  $('warn').hidden=true;
-  $('warn').textContent='';
+async function toggleRecording(){
+  if(recorder && recorder.state==='recording'){stopRecording();return}
+  await startRecording();
 }
-
-function stopTracks(){
-  if(stream){
-    stream.getTracks().forEach(t=>{ try{t.stop()}catch(e){} });
-  }
-  stream=null;
-}
-
-function cleanupAudioGraph(){
-  try{ if(processorNode) processorNode.disconnect(); }catch(e){}
-  try{ if(sourceNode) sourceNode.disconnect(); }catch(e){}
-  processorNode=null;
-  sourceNode=null;
-
-  if(audioContext){
-    try{ audioContext.close(); }catch(e){}
-  }
-  audioContext=null;
-}
-
-function floatTo16BitPCM(float32){
-  const out=new Int16Array(float32.length);
-  for(let i=0;i<float32.length;i++){
-    const s=Math.max(-1,Math.min(1,float32[i]));
-    out[i]=s<0 ? s*0x8000 : s*0x7fff;
-  }
-  return out;
-}
-
-function mergeFloat32(chunks){
-  let total=0;
-  chunks.forEach(c=>total+=c.length);
-  const out=new Float32Array(total);
-  let offset=0;
-  chunks.forEach(c=>{
-    out.set(c,offset);
-    offset+=c.length;
-  });
-  return out;
-}
-
-function bytesToBase64(bytes){
-  const chunk=0x8000;
-  let binary='';
-  for(let i=0;i<bytes.length;i+=chunk){
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+chunk, bytes.length)));
-  }
-  return btoa(binary);
-}
-
-function encodeMp3(samples, sampleRate){
-  if(typeof lamejs==='undefined'){
-    throw new Error('O codificador MP3 não carregou. Atualize a página e tente novamente.');
-  }
-
-  const pcm=floatTo16BitPCM(samples);
-  const encoder=new lamejs.Mp3Encoder(1, sampleRate, 128);
-  const blockSize=1152;
-  const parts=[];
-
-  for(let i=0;i<pcm.length;i+=blockSize){
-    const chunk=pcm.subarray(i, Math.min(i+blockSize, pcm.length));
-    const mp3buf=encoder.encodeBuffer(chunk);
-    if(mp3buf.length) parts.push(new Uint8Array(mp3buf));
-  }
-
-  const end=encoder.flush();
-  if(end.length) parts.push(new Uint8Array(end));
-
-  let total=0;
-  parts.forEach(p=>total+=p.length);
-  const bytes=new Uint8Array(total);
-  let off=0;
-  parts.forEach(p=>{
-    bytes.set(p,off);
-    off+=p.length;
-  });
-
-  return bytes;
-}
-
 async function startRecording(){
+  setError('');
+  if(!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder==='undefined'){
+    setError('Este navegador não oferece suporte à gravação de áudio.');
+    return;
+  }
   try{
-    hideWarn();
+    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const chosen=supportedMime();
+    recorder=chosen?new MediaRecorder(stream,{mimeType:chosen}):new MediaRecorder(stream);
+    mime=recorder.mimeType||chosen||'audio/webm';
+    chunks=[]; dataUrl='';
+    document.getElementById('previewWrap').hidden=true;
+    document.getElementById('sendBtn').disabled=true;
 
-    if(!navigator.mediaDevices?.getUserMedia){
-      throw new Error('Este navegador não permite acesso ao microfone.');
-    }
-
-    stream=await navigator.mediaDevices.getUserMedia({
-      audio:{
-        channelCount:1,
-        echoCancellation:true,
-        noiseSuppression:true,
-        autoGainControl:true
+    recorder.ondataavailable=e=>{if(e.data && e.data.size)chunks.push(e.data)};
+    recorder.onstop=async()=>{
+      stopTracks(); stopTimer();
+      const blob=new Blob(chunks,{type:mime});
+      if(blob.size>7*1024*1024){
+        setError('O áudio ficou maior que 7 MB. Faça uma gravação menor.');
+        resetUi(); return;
       }
-    });
-
-    const AudioCtx=window.AudioContext||window.webkitAudioContext;
-    audioContext=new AudioCtx();
-    await audioContext.resume();
-
-    pcmChunks=[];
-
-    sourceNode=audioContext.createMediaStreamSource(stream);
-    processorNode=audioContext.createScriptProcessor(4096,1,1);
-
-    processorNode.onaudioprocess=e=>{
-      const input=e.inputBuffer.getChannelData(0);
-      pcmChunks.push(new Float32Array(input));
+      dataUrl=await blobToDataUrl(blob);
+      const audio=document.getElementById('preview');
+      audio.src=dataUrl;
+      document.getElementById('previewWrap').hidden=false;
+      document.getElementById('sendBtn').disabled=false;
+      document.getElementById('status').textContent='Áudio pronto para enviar';
+      document.getElementById('recordBtn').textContent='● Gravar novamente';
+      document.getElementById('recordBtn').classList.remove('stop');
+      document.getElementById('micOrb').classList.remove('recording');
     };
 
-    sourceNode.connect(processorNode);
-    processorNode.connect(audioContext.destination);
-
-    startedAt=Date.now();
-    $('start').hidden=true;
-    $('stop').hidden=false;
-    $('redo').hidden=true;
-    $('preview').hidden=true;
-    $('send').disabled=true;
-    $('mic').style.background='#fee2e2';
-    setStatus('Gravando...');
-
-    clearInterval(timer);
-    timer=setInterval(()=>{
-      $('time').textContent=fmt(Math.floor((Date.now()-startedAt)/1000));
-    },500);
-
+    recorder.start(250);
+    startTimer();
+    document.getElementById('status').textContent='Gravando...';
+    document.getElementById('recordBtn').textContent='■ Parar gravação';
+    document.getElementById('recordBtn').classList.add('stop');
+    document.getElementById('micOrb').classList.add('recording');
   }catch(e){
-    showWarn('Não foi possível acessar o microfone: '+(e.message||e));
-  }
-}
-
-async function stopRecording(){
-  try{
-    clearInterval(timer);
-    timer=null;
-
-    $('stop').hidden=true;
-    setStatus('Convertendo para MP3...');
-
-    const sampleRate=audioContext ? audioContext.sampleRate : 44100;
-    const merged=mergeFloat32(pcmChunks);
-
-    cleanupAudioGraph();
     stopTracks();
-
-    if(!merged.length){
-      throw new Error('Nenhum áudio foi capturado.');
-    }
-
-    const mp3Bytes=encodeMp3(merged,sampleRate);
-
-    if(!mp3Bytes.length){
-      throw new Error('Não foi possível gerar o arquivo MP3.');
-    }
-
-    if(mp3Bytes.length>7*1024*1024){
-      throw new Error('O áudio passou de 7 MB. Grave uma mensagem menor.');
-    }
-
-    const base64=bytesToBase64(mp3Bytes);
-    mp3DataUrl='data:audio/mpeg;base64,'+base64;
-
-    const preview=$('preview');
-    preview.src=mp3DataUrl;
-    preview.hidden=false;
-    try{ preview.load(); }catch(e){}
-
-    $('send').disabled=false;
-    $('redo').hidden=false;
-    $('mic').style.background='#dcfce7';
-    setStatus('Áudio MP3 pronto para enviar');
-
-  }catch(e){
-    showWarn(e.message||String(e));
-    resetRecorder();
+    setError('Não foi possível acessar o microfone. Verifique a permissão do navegador.');
   }
 }
-
-function resetRecorder(){
-  clearInterval(timer);
-  timer=null;
-
-  cleanupAudioGraph();
-  stopTracks();
-
-  pcmChunks=[];
-  mp3DataUrl='';
-
-  const preview=$('preview');
-  try{ preview.pause(); }catch(e){}
-  preview.removeAttribute('src');
-  preview.hidden=true;
-
-  $('start').hidden=false;
-  $('stop').hidden=true;
-  $('redo').hidden=true;
-  $('send').disabled=true;
-  $('time').textContent='00:00';
-  $('mic').style.background='#eef2f7';
-  setStatus('Pronto para gravar');
+function stopRecording(){
+  try{if(recorder && recorder.state!=='inactive')recorder.stop()}catch(e){}
 }
-
-function sendBack(){
-  if(!mp3DataUrl){
-    showWarn('Grave um áudio antes de enviar.');
-    return;
+function resetUi(){
+  document.getElementById('recordBtn').textContent='● Iniciar gravação';
+  document.getElementById('recordBtn').classList.remove('stop');
+  document.getElementById('micOrb').classList.remove('recording');
+  document.getElementById('status').textContent='Pronto para gravar';
+  document.getElementById('timer').textContent='00:00';
+}
+function blobToDataUrl(blob){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(String(r.result||'')); r.onerror=reject; r.readAsDataURL(blob);
+  });
+}
+function sendToCentral(){
+  if(!dataUrl)return;
+  if(window.opener && !window.opener.closed){
+    window.opener.postMessage({type:'CENTRAL_AUDIO_RECORDED',dataUrl,mime},'*');
+    setTimeout(()=>window.close(),180);
+  }else{
+    setError('A Central não foi encontrada. Abra este gravador pelo botão “Gravar áudio” da Central.');
   }
-
-  if(!window.opener){
-    showWarn('A Central não está disponível para receber o áudio.');
-    return;
-  }
-
-  window.opener.postMessage({
-    type:'CENTRAL_AUDIO_RECORDED',
-    dataUrl:mp3DataUrl,
-    mime:'audio/mpeg'
-  }, '*');
-
-  setStatus('Áudio enviado para a Central');
-  setTimeout(()=>window.close(),350);
 }
-
-function closeRecorder(){
-  resetRecorder();
-  window.close();
+function closeWindow(){
+  try{if(recorder && recorder.state==='recording')recorder.stop()}catch(e){}
+  stopTracks(); window.close();
 }
-
-$('start').onclick=startRecording;
-$('stop').onclick=stopRecording;
-$('redo').onclick=resetRecorder;
-$('send').onclick=sendBack;
+window.addEventListener('beforeunload',stopTracks);
 </script>
 </body>
 </html>
