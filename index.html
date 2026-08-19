@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gravador de Áudio - Central WhatsApp</title>
+<title>Gravador de Áudio</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
 <style>
   *{box-sizing:border-box}
@@ -25,7 +25,7 @@
 </head>
 <body>
 <div class="card">
-  <h1>🎙️ Gravador de áudio MP3</h1>
+  <h1>🎙️ Gravador de áudio</h1>
   <div class="muted">Grave, ouça e envie o áudio de volta para a Central.</div>
 
   <div class="mic" id="mic">🎙️</div>
@@ -240,7 +240,7 @@ async function stopRecording(){
     }
 
     const base64=bytesToBase64(mp3Bytes);
-    mp3DataUrl='data:audio/mpeg;base64,'+base64;
+    mp3DataUrl='data:audio/mp3;base64,'+base64;
 
     const preview=$('preview');
     preview.src=mp3DataUrl;
@@ -296,7 +296,7 @@ function sendBack(){
   window.opener.postMessage({
     type:'CENTRAL_AUDIO_RECORDED',
     dataUrl:mp3DataUrl,
-    mime:'audio/mpeg'
+    mime:'audio/mp3'
   }, '*');
 
   setStatus('Áudio enviado para a Central');
